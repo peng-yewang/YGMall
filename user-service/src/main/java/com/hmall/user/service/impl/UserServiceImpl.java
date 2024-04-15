@@ -6,6 +6,7 @@ import com.hmall.common.exception.BadRequestException;
 import com.hmall.common.exception.BizIllegalException;
 import com.hmall.common.exception.ForbiddenException;
 import com.hmall.common.utils.UserContext;
+import com.hmall.user.config.JwtProperties;
 import com.hmall.user.domain.dto.LoginFormDTO;
 import com.hmall.user.domain.po.User;
 import com.hmall.user.domain.vo.UserLoginVO;
@@ -14,8 +15,11 @@ import com.hmall.user.service.IUserService;
 import com.hmall.user.utils.JwtTool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import static com.hmall.common.utils.RedisConstants.USER_ID;
 
 /**
  * <p>
@@ -33,7 +37,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     private final JwtTool jwtTool;
 
-    private final com.hmall.user.config.JwtProperties jwtProperties;
+    private final JwtProperties jwtProperties;
+
+    private final StringRedisTemplate stringRedisTemplate;
 
     @Override
     public UserLoginVO login(LoginFormDTO loginDTO) {
@@ -52,7 +58,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             throw new BadRequestException("用户名或密码错误");
         }
         // 5.生成TOKEN
-        String token = jwtTool.createToken(user.getId(), jwtProperties.getTokenTTL());
+        Long userId = user.getId();
+        String token = jwtTool.createToken(userId, jwtProperties.getTokenTTL());
+        //存入redis
+        String key = USER_ID + userId;
+        stringRedisTemplate.opsForHash().hasKey(key,token);
         // 6.封装VO返回
         UserLoginVO vo = new UserLoginVO();
         vo.setUserId(user.getId());

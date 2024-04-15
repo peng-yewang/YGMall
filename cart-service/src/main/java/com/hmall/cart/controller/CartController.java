@@ -10,10 +10,14 @@ import io.swagger.annotations.ApiImplicitParam;
 import io.swagger.annotations.ApiOperation;
 import lombok.RequiredArgsConstructor;
 import org.apache.ibatis.annotations.Param;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import java.util.List;
+
+import static com.hmall.common.utils.RedisConstants.CART_ID_KEY;
+import static com.hmall.common.utils.RedisConstants.ITEM_ID;
 
 @Api(tags = "购物车相关接口")
 @RestController
@@ -21,23 +25,29 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CartController {
     private final ICartService cartService;
-
+    private final StringRedisTemplate stringRedisTemplate;
     @ApiOperation("添加商品到购物车")
     @PostMapping
     public void addItem2Cart(@Valid @RequestBody CartFormDTO cartFormDTO){
         cartService.addItem2Cart(cartFormDTO);
+        //使缓存失效
+        stringRedisTemplate.delete(CART_ID_KEY);
     }
 
     @ApiOperation("更新购物车数据")
     @PutMapping
     public void updateCart(@RequestBody Cart cart){
         cartService.updateById(cart);
+        //使缓存失效
+        stringRedisTemplate.delete(CART_ID_KEY);
     }
 
     @ApiOperation("删除购物车中商品")
     @DeleteMapping("{id}")
     public void deleteCartItem(@Param ("购物车条目id")@PathVariable("id") Long id){
         cartService.removeById(id);
+        //使缓存失效
+        stringRedisTemplate.delete(CART_ID_KEY);
     }
 
     @ApiOperation("查询购物车列表")
@@ -50,5 +60,11 @@ public class CartController {
     @DeleteMapping
     public void deleteCartItemByIds(@RequestParam("ids") List<Long> ids){
         cartService.removeByItemIds(ids);
+        //使购物车缓存失效
+        stringRedisTemplate.delete(CART_ID_KEY);
+        //删除对应商品缓存
+        for(Long id : ids){
+            stringRedisTemplate.delete(ITEM_ID+id);
+        }
     }
 }

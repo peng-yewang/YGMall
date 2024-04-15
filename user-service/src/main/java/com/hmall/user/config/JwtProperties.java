@@ -11,6 +11,8 @@ import java.time.Duration;
 public class JwtProperties {
     private Resource location;
     private String password;
+    //化名
     private String alias;
+    //java.time 设置10分钟的ttl
     private Duration tokenTTL = Duration.ofMinutes(10);
 }

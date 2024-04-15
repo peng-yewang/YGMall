@@ -29,7 +29,10 @@ public class ItemController {
     public PageDTO<ItemDTO> queryItemByPage(PageQuery query,@RequestHeader(value="true",required = false) String truth) {
         System.out.println("truth:"+truth);
         // 1.分页查询
+        //TODO 使用redis先查询缓存，若没有再查数据库，之后再写入缓存
+
         Page<Item> result = itemService.page(query.toMpPage("update_time", false));
+
         // 2.封装并返回
         return PageDTO.of(result, ItemDTO.class);
     }
@@ -37,6 +40,7 @@ public class ItemController {
     @ApiOperation("根据id批量查询商品")
     @GetMapping
     public List<ItemDTO> queryItemByIds(@RequestParam("ids") List<Long> ids){
+        //TODO 使用redis先查询缓存，若没有再查数据库，之后再写入缓存
          return itemService.queryItemByIds(ids);
     }
 
@@ -65,8 +69,6 @@ public class ItemController {
     @ApiOperation("更新商品")
     @PutMapping
     public void updateItem(@RequestBody ItemDTO item) {
-        // 不允许修改商品状态，所以强制设置为null，更新时，就会忽略该字段
-        item.setStatus(null);
         // 更新
         itemService.updateById(BeanUtils.copyBean(item, Item.class));
     }

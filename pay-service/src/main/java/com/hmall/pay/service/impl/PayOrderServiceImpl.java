@@ -1,5 +1,6 @@
 package com.hmall.pay.service.impl;
 
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -11,14 +12,24 @@ import com.hmall.common.utils.UserContext;
 import com.hmall.pay.domain.dto.PayApplyDTO;
 import com.hmall.pay.domain.dto.PayOrderFormDTO;
 import com.hmall.pay.domain.po.PayOrder;
+import com.hmall.pay.domain.vo.PayOrderVO;
 import com.hmall.pay.enums.PayStatus;
 import com.hmall.pay.mapper.PayOrderMapper;
 import com.hmall.pay.service.IPayOrderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import static com.hmall.common.utils.RedisConstants.PAY_ID_KEY;
+import static com.hmall.common.utils.RedisConstants.SHORT_SIXTY_MINUTES;
 
 /**
  * <p>
@@ -33,8 +44,9 @@ import java.time.LocalDateTime;
 public class PayOrderServiceImpl extends ServiceImpl<PayOrderMapper, PayOrder> implements IPayOrderService {
 
     private final UserClient userClient;
-
     private final TradeClient orderClient;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final RabbitTemplate rabbitTemplate;
 
     @Override
     public String applyPayOrder(PayApplyDTO applyDTO) {
@@ -62,8 +74,40 @@ public class PayOrderServiceImpl extends ServiceImpl<PayOrderMapper, PayOrder> i
             throw new BizIllegalException("交易已支付或关闭！");
         }
         // 5.修改订单状态
+        //orderClient.markOrderPaySuccess(po.getBizOrderNo());
+        try {
+            rabbitTemplate.convertAndSend("pay.topic",
+                    "pay.success",po.getBizOrderNo());
+        } catch (AmqpException e) {
+            log.error("支付成功，但是通知交易服务失败",e);
+        }
+    }
 
-        orderClient.markOrderPaySuccess(po.getBizOrderNo());
+    @Override
+    public List<PayOrderVO> queryList() {
+        String key = PAY_ID_KEY;
+        //查缓存
+        List<String> payOrderLists = stringRedisTemplate.opsForList().range(key, 0, -1);
+        //不为空则返回
+        ArrayList<PayOrderVO> payOrderVOS = new ArrayList<>();
+        if (payOrderLists.size()!=0) {
+            //转为PayOrderVO并返回
+            for(String payOrderList:payOrderLists){
+                payOrderVOS.add(JSONUtil.toBean(payOrderList,PayOrderVO.class));
+            }
+            return payOrderVOS;
+        }
+        //查数据库
+        List<PayOrder> lists = list();
+        for(PayOrder list:lists){
+            PayOrderVO payOrderVO = BeanUtils.copyBean(list, PayOrderVO.class);
+            payOrderVOS.add(payOrderVO);
+            //转为json存入redis
+            stringRedisTemplate.opsForList().leftPush(key, JSONUtil.toJsonStr(payOrderVO));
+        }
+        //设置redis有效期
+        stringRedisTemplate.expire(key,SHORT_SIXTY_MINUTES, TimeUnit.MINUTES);
+        return payOrderVOS;
     }
 
     public boolean markPayOrderSuccess(Long id, LocalDateTime successTime) {

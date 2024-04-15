@@ -13,3 +13,4 @@ spring:
           - dataId: shared-log.yaml # 共享日志配置
           - dataId: shared-swagger.yaml # 共享日志配置
           - dataId: shared-seata.yaml # 共享seata配置
+          - dataId: shared-redis.yaml #共享redis配置

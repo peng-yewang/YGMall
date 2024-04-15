@@ -9,7 +9,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-
+/**
+ *
+ * demo类，不用管
+ *
+ */
 @Component
 public class MyGlobalFilter implements GlobalFilter, Ordered {
     /**
@@ -20,12 +24,11 @@ public class MyGlobalFilter implements GlobalFilter, Ordered {
      */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        //TODO 模拟登录校验逻辑
+        // 模拟登录校验逻辑
         ServerHttpRequest request = exchange.getRequest();
         HttpHeaders headers = request.getHeaders();
         System.out.println("headers = " + headers);
         //放行
-
         return chain.filter(exchange);
     }
 

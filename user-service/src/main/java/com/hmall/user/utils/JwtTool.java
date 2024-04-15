@@ -23,15 +23,18 @@ public class JwtTool {
     /**
      * 创建 access-token
      *
-     * @param userDTO 用户信息
+     * @param userId 用户信息 Duration token时间
      * @return access-token
      */
     public String createToken(Long userId, Duration ttl) {
         // 1.生成jws
         return JWT.create()
                 .setPayload("user", userId)
+                //ttl.toMillis()转为毫秒相加
                 .setExpiresAt(new Date(System.currentTimeMillis() + ttl.toMillis()))
+                //设置签名
                 .setSigner(jwtSigner)
+                //执行签名
                 .sign();
     }
 

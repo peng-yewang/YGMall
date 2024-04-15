@@ -1,6 +1,5 @@
 package com.hmall.trade.controller;
 
-import com.hmall.common.utils.BeanUtils;
 import com.hmall.trade.domain.dto.OrderFormDTO;
 import com.hmall.trade.domain.vo.OrderVO;
 import com.hmall.trade.service.IOrderService;
@@ -21,7 +20,7 @@ public class OrderController {
     @ApiOperation("根据id查询订单")
     @GetMapping("{id}")
     public OrderVO queryOrderById(@Param ("订单id")@PathVariable("id") Long orderId) {
-        return BeanUtils.copyBean(orderService.getById(orderId), OrderVO.class);
+        return orderService.queryById(orderId);
     }
 
     @ApiOperation("创建订单")

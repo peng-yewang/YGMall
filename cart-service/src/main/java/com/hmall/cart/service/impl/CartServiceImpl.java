@@ -1,6 +1,7 @@
 package com.hmall.cart.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmall.api.clients.ItemClient;
@@ -17,16 +18,18 @@ import com.hmall.common.utils.CollUtils;
 import com.hmall.common.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static com.hmall.common.utils.RedisConstants.CART_ID_KEY;
+import static com.hmall.common.utils.RedisConstants.SHORT_SIXTY_MINUTES;
 
 /**
  * <p>
@@ -48,6 +51,8 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
 
     private final ItemClient itemClient;
 
+    private final StringRedisTemplate stringRedisTemplate;
+
     @Override
     public void addItem2Cart(CartFormDTO cartFormDTO) {
         // 1.获取登录用户
@@ -61,7 +66,6 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
         }
         // 2.2.不存在，判断是否超过购物车数量
         checkCartsFull(userId);
-
         // 3.新增购物车条目
         // 3.1.转换PO
         Cart cart = BeanUtils.copyBean(cartFormDTO, Cart.class);
@@ -74,19 +78,38 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
     @Override
     public List<CartVO> queryMyCarts() {
         // 1.查询我的购物车列表
+        //查缓存
+        List<String> cartList = stringRedisTemplate.opsForList().range(CART_ID_KEY, 0, -1);
+        //不为空则返回
+        ArrayList<CartVO> cartVOS = new ArrayList<>();
+        if (cartList.size()!=0) {
+            //转为PayOrderVO并返回
+            for(String payOrderList:cartList){
+                cartVOS.add(JSONUtil.toBean(payOrderList,CartVO.class));
+            }
+            // 3.处理VO中的商品信息
+            handleCartItems(cartVOS);
+            return cartVOS;
+        }
+        //缓存没有，查数据库
         List<Cart> carts = lambdaQuery().eq(Cart::getUserId,  UserContext.getUser()).list();
         if (CollUtils.isEmpty(carts)) {
+            //为空返回
             return CollUtils.emptyList();
         }
-
-        // 2.转换VO
-        List<CartVO> vos = BeanUtils.copyList(carts, CartVO.class);
-
+        //存入缓存
+        for(Cart cart:carts){
+            CartVO cartVO = BeanUtils.copyBean(cart, CartVO.class);
+            cartVOS.add(cartVO);
+            //转为json存入redis
+            stringRedisTemplate.opsForList().rightPush(CART_ID_KEY, JSONUtil.toJsonStr(cartVO));
+        }
+        //设置redis有效期
+        stringRedisTemplate.expire(CART_ID_KEY,SHORT_SIXTY_MINUTES, TimeUnit.MINUTES);
         // 3.处理VO中的商品信息
-        handleCartItems(vos);
-
+        handleCartItems(cartVOS);
         // 4.返回
-        return vos;
+        return cartVOS;
     }
 
     private void handleCartItems(List<CartVO> vos) {

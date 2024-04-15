@@ -1,3 +1,4 @@
 /ignore
 /hm-service/
 /.idea/
+/trade-service/src/test/java/com/hmall/trade/Test.java
